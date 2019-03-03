@@ -19,7 +19,7 @@ extern "C" void solve_system(int, int, float **, float *, float *);
     const int normalized_y = 40; 
 
     float **a, *bx, *by, *x;
-    float **a1; 
+    Mat *pixelIntensities; 
 
                                         //image 1       //image 2      //image 3       //image 4    //image 5
     float DataSetS1_XValues [10][m] = {{26,63,44,45}, {32,75,65,60}, {25,62,46,46}, {16,58,30,32}, {33,75,69,65},
@@ -55,6 +55,12 @@ void print1dMatrix(int m, float * matrix)
     cout << endl;
 }
 
+void DisplayImage(Mat image)
+{
+    namedWindow( "Display window", WINDOW_AUTOSIZE );// Create a window for display.
+    imshow( "Display window", image ); 
+}
+
 float* flatten(int m, int n, float **matrixToFlatten)
 {
     float *flattened = new float[n*m]; 
@@ -78,11 +84,6 @@ void LoadArrays(int imageIndex)
         a[row][1] = DataSetS1_YValues[imageIndex][row];
         a[row][2] = 1;
 
-        a1[row][0] = DataSetS1_XValues[imageIndex][row];
-        a1[row][1] = DataSetS1_YValues[imageIndex][row];
-        a1[row][2] = 1;
-        a1[row][3] = DataSetS1_scaledXValues[row];
-
         //p-hat x
         bx[row] = DataSetS1_scaledXValues[row];
         by[row] = DataSetS1_scaledYValues[row];
@@ -96,11 +97,19 @@ double dot(Mat matrix1, Mat matrix2)
     return result;
 }
 
-Mat ReadOriginalImage(int imageIndex)
+Mat ReadOriginalImage(int imageIndex, bool readNormalizedImages)
 {
     Mat image;
     char buffer[50];
-    sprintf(buffer, "%s%d%s", "./Images/S1/", imageIndex + 1, ".pgm");
+    if (readNormalizedImages)
+    {  
+        sprintf(buffer, "%s%d%s", "./Images/S1/", imageIndex + 1, "_normalized.pgm");
+    }
+    else
+    {        
+        sprintf(buffer, "%s%d%s", "./Images/S1/", imageIndex + 1, ".pgm");          
+    }
+
     image = imread(buffer, IMREAD_GRAYSCALE); // Read the file
 
     if (!image.data) // Check for invalid input
@@ -178,31 +187,20 @@ Mat *RemapImage(Mat image, Mat x_solution, Mat y_solution)
         }
     }
 
-
-   // namedWindow( "Display window", WINDOW_AUTOSIZE);// Create a window for display.
-   // imshow( "Display window", image); 
-   // namedWindow( "new", WINDOW_AUTOSIZE );// Create a window for display.
-  //  imshow( "new", *mappedImage); 
-  //  waitKey(0); // Wait for a keystroke in the windowd
-
     return mappedImage;
 
 }
 
-int main(int argc, char *argv[])
+void Problem1()
 {
-
     //initialize a, x, b
-    a = new float *[m + 1];
-    for (i = 0; i < m + 1; i++)
-        a[i] = new float[n + 1];
-    a1 = new float *[m + 1];
-    for (i = 0; i < m + 1; i++)
-        a1[i] = new float[n + 2];
+    a = new float *[m];
+    for (i = 0; i < m; i++)
+        a[i] = new float[n];
 
-    x = new float[n + 1];
-    bx = new float[m + 1];
-    by = new float[m + 1];
+    x = new float[n];
+    bx = new float[m];
+    by = new float[m];
 
     for (int imageIndex = 0; imageIndex < NumberOfImagesInDataSet; imageIndex++)
     {
@@ -214,17 +212,44 @@ int main(int argc, char *argv[])
         Mat bx_mat = Mat(m, 1, 5, bx);
         Mat by_mat = Mat(m, 1, 5, by);
 
-        //solve for p-hat x using SVD
+        //solve for p-hat x, p-hat y using SVD
         Mat x_solution = SolveSystemsWithSVD(a_mat, bx_mat); 
         Mat y_solution = SolveSystemsWithSVD(a_mat, by_mat);
 
-
-        Mat image = ReadOriginalImage(imageIndex); 
+        Mat image = ReadOriginalImage(imageIndex, false); 
         Mat *remappedImage = RemapImage(image, x_solution, y_solution);
 
         SaveImage(*remappedImage, imageIndex + 1);
     }
 
-    waitKey(0); // Wait for a keystroke in the window
+}
+
+void Problem2()
+{
+   // b = new float[m + 1];
+
+    for (int imageIndex = 0; imageIndex < NumberOfImagesInDataSet; imageIndex++)
+    {
+        Mat image = ReadOriginalImage(imageIndex, true);
+        
+        //b matrix - a matrix of all the pixel intensities
+        pixelIntensities = new Mat(image.rows, image.cols, 0, &image); 
+        
+        //x matrix - a matrix to be solved for (4x1?), a, b, c, d
+        //A matrix - x, y, xy, 1
+    }
+}
+
+int main(int argc, char *argv[])
+{
+    //problem 1 using SVD to solve the affine transformations
+    Problem1();     
+
+    //problem 2 using SVD to solve the over constrained systems of pixel intensities 
+    Problem2(); 
+
+    //wait for keystroke so user knows program is done
+    waitKey(0);
+
     return 0;
 }
