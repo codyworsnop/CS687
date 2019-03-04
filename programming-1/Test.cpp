@@ -4,6 +4,7 @@
 #include <math.h>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
+#include <opencv2/opencv.hpp>
 #include <iostream>
 #define CV_64F 6
 using namespace cv;
@@ -12,25 +13,31 @@ using namespace std;
 extern "C" void solve_system(int, int, float **, float *, float *);
 
     const int NumberOfImagesInDataSet = 10; 
-    int i;
+
     const int m = 4;
     const int n = 3;
     const int normalized_x = 48; 
     const int normalized_y = 40; 
 
+    //problem 1 variables
     float **a, *bx, *by, *x;
-    Mat *pixelIntensities; 
+
+    //problem 2 variables
+    float **a2, *x2; 
+    Mat *b2; 
 
                                         //image 1       //image 2      //image 3       //image 4    //image 5
     float DataSetS1_XValues [10][m] = {{26,63,44,45}, {32,75,65,60}, {25,62,46,46}, {16,58,30,32}, {33,75,69,65},
-                                        //image 6       //image 7       //image 8   //image 9   
+                                        //image 6       //image 7       //image 8   //image 9        //image 10
                                        {14,55,27,31}, {24,62,44,44}, {27,64,49,50}, {30,68,54,52}, {33,75,63,57}};
 
-    float DataSetS1_YValues [10][m] = {{50,50,88,70}, {44,44,67,86}, {48,48,72,88}, {45,42,63,83}, {44,42,62,84},                                      
+                                        //image 1       //image 2     //image 3       //image 4      //image 5
+    float DataSetS1_YValues [10][m] = {{50,50,88,70}, {44,44,67,86}, {48,48,72,88}, {45,42,63,83}, {44,42,62,84},  
+                                        //image 6       //image 7      //image 8      //image 9      //image 10                                    
                                        {46,44,65,85}, {44,43,58,80}, {46,43,64,84}, {37,35,46,73}, {51,50,76,91}};
 
-    float DataSetS1_scaledXValues [m] = {10,24,18,18};
-    float DataSetS1_scaledYValues [m] = {17,17,24,30};
+    float DataSetS1_scaledXValues [m] = {10,38,24,24};
+    float DataSetS1_scaledYValues [m] = {10,10,20,35};
 
 void print2dMatrix(int m, int n, float ** matrix)
 {
@@ -124,6 +131,7 @@ Mat SolveSystemsWithSVD(Mat a, Mat b)
 {
     Mat w, u, vt, w_inverse;
     SVD::compute(a, w, u, vt, SVD::FULL_UV);
+    cout << w << endl;
     Mat w_full = (Mat_<float>(4, 3) << w.at<float>(0), 0, 0, 0, w.at<float>(1), 0, 0, 0, w.at<float>(2), 0, 0, 0);
 
     invert(w_full, w_inverse, DECOMP_SVD);
@@ -140,15 +148,15 @@ void SaveImage(Mat image, int name)
     imwrite(buffer, image);
 }
 
-Mat *RemapImage(Mat image, Mat x_solution, Mat y_solution)
+Mat RemapImage(Mat image, Mat x_solution, Mat y_solution)
 {
-    Mat *mappedImage = new Mat(normalized_x, normalized_y, 0, cvScalar(0.)); 
+    Mat mappedImage = Mat(normalized_x, normalized_y, 0, cvScalar(0)); 
     int x = 0; 
     int y = 0;
-    float new_x = 0; 
-    float new_y = 0;
+    int new_x = 0; 
+    int new_y = 0;
     Mat *coordinates; 
-   
+
     for (int row = 0; row < image.rows; row++)
     {
         for (int column = 0; column < image.cols; column++)
@@ -158,44 +166,29 @@ Mat *RemapImage(Mat image, Mat x_solution, Mat y_solution)
             new_x = dot(*coordinates, x_solution); 
             new_y = dot(*coordinates, y_solution); 
 
-            //normalize new x and y values 
-            if (new_x < 0)
+            //normalize new x and y values
+            if (new_x >= 0 && new_x < normalized_x && new_y >= 0 && new_y < normalized_y)
             {
-                new_x = new_x - new_x; 
-            }
-            else if (new_x > normalized_x)
-            {
-                new_x = new_x - (normalized_x - new_x); 
-            }
+                new_x = (int)new_x;
+                new_y = (int)new_y;
 
-            if (new_y < 0)
-            {
-                new_y = new_y - new_y; 
+                mappedImage.at<uchar>(new_x, new_y) = image.at<uchar>(row, column);
             }
-            else if (new_y > normalized_y)
-            {
-                new_y = new_y - (normalized_y - new_y); 
-            }
-
-            new_x = (int)new_x;
-            new_y = (int)new_y;
-
-            mappedImage->at<uchar>(new_x, new_y) = image.at<uchar>(row, column); 
 
             delete(imageCoordinates);
             delete(coordinates);
         }
-    }
+    } 
 
+    mappedImage.reshape(normalized_y, normalized_x); 
     return mappedImage;
-
 }
 
 void Problem1()
 {
     //initialize a, x, b
     a = new float *[m];
-    for (i = 0; i < m; i++)
+    for (int i = 0; i < m; i++)
         a[i] = new float[n];
 
     x = new float[n];
@@ -215,35 +208,64 @@ void Problem1()
         //solve for p-hat x, p-hat y using SVD
         Mat x_solution = SolveSystemsWithSVD(a_mat, bx_mat); 
         Mat y_solution = SolveSystemsWithSVD(a_mat, by_mat);
+        const Mat tm = (Mat_<float>(2, 3) << x_solution.at<float>(0), x_solution.at<float>(1), x_solution.at<float>(2), y_solution.at<float>(0), y_solution.at<float>(1), y_solution.at<float>(2));
 
         Mat image = ReadOriginalImage(imageIndex, false); 
-        Mat *remappedImage = RemapImage(image, x_solution, y_solution);
+        Mat remappedImage = RemapImage(image, x_solution, y_solution);
 
-        SaveImage(*remappedImage, imageIndex + 1);
+        SaveImage(remappedImage, imageIndex + 1);
     }
+}
 
+void LoadAMatrix(Mat image)
+{
+    for (int row = 0; row < image.rows; row++)
+    {
+        for (int col = 0; col < image.cols; col++)
+        {
+            a2[row][0] = row;
+            a2[row][1] = col;                          
+            a2[row][2] = row * col; 
+            a2[row][3] = 1; 
+        }
+    }
 }
 
 void Problem2()
 {
-   // b = new float[m + 1];
+    int mnNormSIze = normalized_x * normalized_y; 
+
+    a2 = new float *[mnNormSIze];
+    for (int i = 0; i < mnNormSIze; i++)
+        a2[i] = new float[4];
 
     for (int imageIndex = 0; imageIndex < NumberOfImagesInDataSet; imageIndex++)
     {
         Mat image = ReadOriginalImage(imageIndex, true);
-        
+
         //b matrix - a matrix of all the pixel intensities
-        pixelIntensities = new Mat(image.rows, image.cols, 0, &image); 
-        
+        b2 = new Mat(image.rows, image.cols, 0, &image);
+        b2->reshape(normalized_x * normalized_y, 1);
+
         //x matrix - a matrix to be solved for (4x1?), a, b, c, d
+        x2 = new float[m];
+
         //A matrix - x, y, xy, 1
+        LoadAMatrix(image); 
+        
+        float *a2_flat = flatten(mnNormSIze, 4, a2);
+
+        Mat a2_mat = Mat(mnNormSIze, 4, 5, a2_flat); 
+        Mat b2_mat = Mat(mnNormSIze, 1, 5, b2);
+
+        Mat wut = SolveSystemsWithSVD(a2_mat, b2_mat); 
     }
 }
 
 int main(int argc, char *argv[])
 {
     //problem 1 using SVD to solve the affine transformations
-    Problem1();     
+    //Problem1();     
 
     //problem 2 using SVD to solve the over constrained systems of pixel intensities 
     Problem2(); 
